@@ -11,7 +11,11 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	gogitconf "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/armor"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
 func getPublicKeys(sshKeyPath string, knownHostsPath string) (*ssh.PublicKeys, error) {
@@ -115,7 +119,7 @@ func SyncGitRepo(dir string, url string, ref string, sshKeyPath string, knownHos
 	_, err := os.Stat(path.Join(dir, ".git"))
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return nil, false, errors.New(fmt.Sprintf("Error accessing repo directory's .git sub-directory: %s", dir, err.Error()))
+			return nil, false, errors.New(fmt.Sprintf("Error accessing repo directory's .git sub-directory: %s", err.Error()))
 		}
 
 		repo, cloneErr := cloneRepo(dir, url, ref, pk)
@@ -154,10 +158,64 @@ func VerifyTopCommit(repo *gogit.Repository, armoredKeyrings []string) error {
 }
 
 /*
+Optional parameters to pass to the CommitFiles command
+*/
+type CommitOptions struct {
+	//Name of the commiter
+	Name           string
+	//Email of the commiter
+	Email          string
+	//Path of gpg armored private key to sign commit with
+	SignKeyPath    string
+	//Path of optional passphrase if the gpg armored private key is encrypted
+	PassphrasePath string
+}
+
+func getSignKey(signKeyPath string, passphrasePath string) (*openpgp.Entity, error) {
+	signKey, readSignKeyErr := os.ReadFile(signKeyPath)
+	if readSignKeyErr != nil {
+		return nil, errors.New(fmt.Sprintf("Error reading signing key: %s", readSignKeyErr.Error()))
+	}
+	
+	signBlock, decErr := armor.Decode(strings.NewReader(string(signKey)))
+	if decErr != nil {
+		return nil, errors.New(fmt.Sprintf("Error decoding signing key: %s", decErr.Error()))
+	}
+
+	if signBlock.Type != openpgp.PrivateKeyType {
+		return nil, errors.New("Signing key is not a gpg private key.")
+	}
+
+	signReader := packet.NewReader(signBlock.Body)
+	signEntity, readErr := openpgp.ReadEntity(signReader)
+	if readErr != nil {
+		return nil, errors.New(fmt.Sprintf("Error parsing signing key: %s", readErr.Error()))
+	}
+
+	if signEntity.PrivateKey.Encrypted {
+		if passphrasePath == "" {
+			return nil, errors.New("Signing key is encrypted and no passphrase was passed to decrypt it.")
+		}
+
+		passphrase, readPassphraseErr := os.ReadFile(passphrasePath)
+		if readPassphraseErr != nil {
+			return nil, errors.New(fmt.Sprintf("Error reading passphrase: %s", readPassphraseErr.Error()))
+		}
+
+		decrErr := signEntity.PrivateKey.Decrypt(passphrase)
+		if decrErr != nil {
+			return nil, errors.New(fmt.Sprintf("Error decrypting signing key with passphrase: %s", decrErr.Error()))
+		}
+	}
+
+	return signEntity, nil
+} 
+
+/*
 Commits the given list of files in the git repository.
 If not changes are detected in the files provided, a commit will not be attempted.
 */
-func CommitFiles(repo *gogit.Repository, files []string, msg string) (bool, error) {
+func CommitFiles(repo *gogit.Repository, files []string, msg string, opts CommitOptions) (bool, error) {
 	w, wErr := repo.Worktree()
 	if wErr != nil {
 		return false, errors.New(fmt.Sprintf("Error accessing repo worktree: %s", wErr.Error()))
@@ -180,7 +238,25 @@ func CommitFiles(repo *gogit.Repository, files []string, msg string) (bool, erro
 		return false, nil
 	}
 
-	_, commErr := w.Commit(msg, &gogit.CommitOptions{})
+	comOpts := gogit.CommitOptions{}
+	if opts.Name != "" || opts.Email != "" {
+		comOpts.Author = &object.Signature{
+			Name: opts.Name,
+			Email: opts.Email,
+			When: time.Now(),
+		}
+	}
+
+	if opts.SignKeyPath != "" {
+		signEntity, signEntErr := getSignKey(opts.SignKeyPath, opts.PassphrasePath)
+		if signEntErr != nil {
+			return false, signEntErr
+		}
+		
+		comOpts.SignKey = signEntity
+	}
+
+	_, commErr := w.Commit(msg, &comOpts)
 	if commErr != nil {
 		return false, errors.New(fmt.Sprintf("Error commiting file changes: %s", commErr.Error()))
 	}
