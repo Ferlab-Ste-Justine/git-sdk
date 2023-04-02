@@ -39,11 +39,7 @@ func getPublicKeys(sshKeyPath string, knownHostsPath string) (*ssh.PublicKeys, e
 		return nil, errors.New(fmt.Sprintf("Failed to parse known hosts file %s: %s", knownHostsPath, knowHostsErr.Error()))
 	}
 
-	cliConf, cliConfErr := publicKeys.ClientConfig()
-	if cliConfErr != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to access ssh key config %s: %s", sshKeyPath, cliConfErr.Error()))
-	}
-	cliConf.HostKeyCallback = callback
+	(*publicKeys).HostKeyCallbackHelper.HostKeyCallback = callback
 
 	return publicKeys, nil
 }
