@@ -8,7 +8,6 @@ import (
 	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/go-git/go-git/v5/storage/memory"
 )
 
@@ -33,13 +32,13 @@ func (mem *MemoryStore) Clear() {
 Clone the given reference of a given repo in a memory filesystem.
 A reference to the generated filesystem as well as the repository is returned.
 */
-func MemCloneGitRepo(url string, ref string, depth int, pk *ssh.PublicKeys) (*GitRepository, *MemoryStore, error) {
+func MemCloneGitRepo(url string, ref string, depth int, sshCred *SshCredentials) (*GitRepository, *MemoryStore, error) {
 	storer := memory.NewStorage()
 	fs := memfs.New()
 	store := MemoryStore{storer, &fs}
 
 	repo, cloneErr := gogit.Clone(storer, fs, &gogit.CloneOptions{
-		Auth:              pk,
+		Auth:              sshCred.Keys,
 		RemoteName:        "origin",
 		URL:               url,
 		ReferenceName:     plumbing.NewBranchReferenceName(ref),
