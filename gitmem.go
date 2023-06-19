@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path"
+	"strings"
 
 	billy "github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-billy/v5/memfs"
@@ -31,16 +32,29 @@ func (mem *MemoryStore) Clear() {
 }
 
 /*
-Returns all the files in the memory filesystem as a map where the keys are the full path of each file
-and the value is their content
+Returns all the files in the memory filesystem thet fall under a given source path as a map where the keys are the relative path of each file
+(relative to the specified source path) and the value is their content. 
+You can pass the empty string as a source path if you wish to return the entire content of the memory filesystem.
 */
-func (mem *MemoryStore) GetKeyVals() (map[string]string, error) {
+func (mem *MemoryStore) GetKeyVals(sourcePath string) (map[string]string, error) {
 	keys := make(map[string]string)
-	err := buildKeySpace("", mem, keys)
+	err := buildKeySpace(sourcePath, sourcePath, mem, keys)
 	return keys, err
 }
 
-func buildKeySpace(fPath string, store *MemoryStore, keys map[string]string) error {
+func stripsourcePath(fPath string, sourcePath string) string {
+	if sourcePath == "" {
+		return fPath
+	}
+
+	if sourcePath[len(sourcePath)-1:] == "/" {
+		return strings.TrimPrefix(fPath, sourcePath)
+	}
+
+	return strings.TrimPrefix(fPath, sourcePath + "/")
+}
+
+func buildKeySpace(fPath string, sourcePath string, store *MemoryStore, keys map[string]string) error {
 	files, filesErr := (*store.Fs).ReadDir(fPath)
 	if filesErr != nil {
 		return filesErr
@@ -48,7 +62,7 @@ func buildKeySpace(fPath string, store *MemoryStore, keys map[string]string) err
 
 	for _, file := range files {
 		if file.IsDir() {
-			err := buildKeySpace(path.Join(fPath, file.Name()), store, keys)
+			err := buildKeySpace(path.Join(fPath, file.Name()), sourcePath, store, keys)
 			if err != nil {
 				return err
 			}
@@ -66,7 +80,7 @@ func buildKeySpace(fPath string, store *MemoryStore, keys map[string]string) err
 					return fReaderErr
 				}
 				
-				keys[path.Join(fPath, file.Name())] = string(fContent)
+				keys[path.Join(stripsourcePath(fPath, sourcePath), file.Name())] = string(fContent)
 
 				return nil
 			}()
