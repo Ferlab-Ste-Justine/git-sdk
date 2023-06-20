@@ -47,6 +47,10 @@ func stripsourcePath(fPath string, sourcePath string) string {
 		return fPath
 	}
 
+	if fPath == sourcePath {
+		return ""
+	}
+
 	if sourcePath[len(sourcePath)-1:] == "/" {
 		return strings.TrimPrefix(fPath, sourcePath)
 	}
