@@ -39,15 +39,19 @@ type GitRepository struct {
 
 /*
 Produces ssh credentials needed by go-git to clone/pull a remote repository and push to it.
-Arguments are file paths to the private ssh key of the user and ssh host key fingerprint of the git server.
+Arguments are file paths to the private ssh key of the user, ssh host key fingerprint of the git server and user to authentify as (will be 'git' if empty string is passed)
 */
-func GetSshCredentials(sshKeyPath string, knownHostsPath string) (*SshCredentials, error) {
+func GetSshCredentials(sshKeyPath string, knownHostsPath string, user string) (*SshCredentials, error) {
 	_, statErr := os.Stat(sshKeyPath)
 	if statErr != nil {
 		return nil, errors.New(fmt.Sprintf("Failed to access ssh key file %s: %s", sshKeyPath, statErr.Error()))
 	}
 
-	publicKeys, pkGenErr := ssh.NewPublicKeysFromFile("git", sshKeyPath, "")
+	if user == "" {
+		user = "git"
+	}
+
+	publicKeys, pkGenErr := ssh.NewPublicKeysFromFile(user, sshKeyPath, "")
 	if pkGenErr != nil {
 		return nil, errors.New(fmt.Sprintf("Failed to generate public key: %s", pkGenErr.Error()))
 	}

@@ -44,6 +44,7 @@ type GiteaOpts struct {
 	Email    string
 	SshPub   string
 	Repos    []string
+	Debug    bool
 }
 
 type GiteaTemplate struct {
@@ -128,8 +129,10 @@ func LaunchTestGitea(opts GiteaOpts) (TeardownTestGitea, TestGiteaInfo, error) {
 		"--work-path", path.Join(opts.Workdir, "workdir"),
 	)
 
-	//cmd.Stdout = os.Stdout
-	//cmd.Stderr = os.Stderr
+	if opts.Debug {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 
 	teardown := func() error {
 		err := cmd.Process.Kill()
@@ -154,7 +157,6 @@ func LaunchTestGitea(opts GiteaOpts) (TeardownTestGitea, TestGiteaInfo, error) {
 		return func() error {return nil}, TestGiteaInfo{}, err
 	}
 
-	//gitea admin user create --username magnitus --password localgiteapassword --email eric_vallee@webificservices.com -c /home/magnitus/Projects/test/gitea/conf/app.ini
 	createAdminCmd := exec.Command(
 		"gitea", "admin", "user", "create",
 		"--username", currUser.Username,
@@ -164,8 +166,10 @@ func LaunchTestGitea(opts GiteaOpts) (TeardownTestGitea, TestGiteaInfo, error) {
 		"--admin",
 	)
 
-	//createAdminCmd.Stdout = os.Stdout
-	//createAdminCmd.Stderr = os.Stderr
+	if opts.Debug {
+		createAdminCmd.Stdout = os.Stdout
+		createAdminCmd.Stderr = os.Stderr
+	}
 
 	err = createAdminCmd.Start()
 	if err != nil {
@@ -245,7 +249,7 @@ func SetupDefaultTestEnvironment() (TeardownTestGitea, TestGiteaInfo, string, er
 		return func() error {return nil}, TestGiteaInfo{}, "", errors.New(fmt.Sprintf("Error occured launching getting current working directory: %s", workDirErr.Error()))
 	}
 
-    sshPub, sshPubErr := os.ReadFile(path.Join(workDir, "test", "keys", "id_rsa.pub"))
+    sshPub, sshPubErr := os.ReadFile(path.Join(workDir, "test", "keys", "ssh", "id_rsa.pub"))
 	if sshPubErr != nil {
 		return func() error {return nil}, TestGiteaInfo{}, "", errors.New(fmt.Sprintf("Error occured reading user's public ssh key: %s", sshPubErr.Error()))
 	}

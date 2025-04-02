@@ -17,9 +17,13 @@ func TestGetSshCredentials(t *testing.T) {
 	}
 	defer teardown()
 
-	_, sshCredsErr := GetSshCredentials(path.Join("test", "keys", "id_rsa"), giteaInfo.KnownHostsFile)
+	sshCreds, sshCredsErr := GetSshCredentials(path.Join("test", "keys", "ssh", "id_rsa"), giteaInfo.KnownHostsFile, "someUser")
 	if sshCredsErr != nil {
 		t.Errorf("Error retrieving ssh credentials: %s", sshCredsErr.Error())
+	}
+
+	if sshCreds.Keys.User != "someUser" {
+		t.Errorf("Expected ssh credentials to have user 'someUser' and it had user '%s' instead", sshCreds.Keys.User)
 	}
 }
 

@@ -79,12 +79,12 @@ resource "tls_private_key" "ssh_key" {
 
 resource "local_file" "ssh_key_private" {
   content = chomp(tls_private_key.ssh_key.private_key_pem)
-  filename = "${path.module}/keys/id_rsa"
+  filename = "${path.module}/keys/ssh/id_rsa"
   file_permission = "0600"
 }
 
 resource "local_file" "ssh_key_pub" {
   content = chomp(tls_private_key.ssh_key.public_key_openssh)
-  filename = "${path.module}/keys/id_rsa.pub"
+  filename = "${path.module}/keys/ssh/id_rsa.pub"
   file_permission = "0600"
 }
