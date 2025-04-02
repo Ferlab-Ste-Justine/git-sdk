@@ -1,11 +1,8 @@
 package git
 
 import (
-	//"fmt"
-	//"os"
 	"path"
 	"testing"
-	//"time"
 
 	"github.com/Ferlab-Ste-Justine/git-sdk/testutils"
 )
@@ -25,5 +22,14 @@ func TestSyncGitRepo(t *testing.T) {
 	_, _, syncErr := SyncGitRepo(path.Join(reposDir, "test"), giteaInfo.RepoUrls[0], "main", sshCreds)
 	if syncErr != nil {
 		t.Errorf("Error cloning repo test: %s", syncErr.Error())
+	}
+
+	dirContent, dirContentErr := testutils.GetDirectoryContent(path.Join(reposDir, "test"), ".git")
+	if dirContentErr != nil {
+		t.Errorf("Error getting directory content of test: %s", dirContentErr.Error())
+	}
+
+	if !dirContent.Equals(testutils.DirectoryContent(map[string]string{"README.md": "# test\n\ntest"})) {
+		t.Errorf("Cloned directory content did not match expectations")
 	}
 }
