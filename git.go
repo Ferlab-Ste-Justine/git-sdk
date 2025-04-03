@@ -38,6 +38,17 @@ type GitRepository struct {
 }
 
 /*
+Structure abstracting away gogit/v5/plumbing/object.Commit structure
+*/
+type GitCommit struct {
+	Commit *object.Commit
+}
+
+func (commit *GitCommit) IsSame(other *GitCommit) bool {
+	return commit.Commit.Hash.String() == other.Commit.Hash.String()
+}
+
+/*
 Produces ssh credentials needed by go-git to clone/pull a remote repository and push to it.
 Arguments are file paths to the private ssh key of the user, ssh host key fingerprint of the git server and user to authentify as (will be 'git' if empty string is passed)
 */
@@ -114,6 +125,24 @@ func GetSignatureKey(signKeyPath string, passphrasePath string) (*CommitSignatur
 
 	return &CommitSignatureKey{signEntity}, nil
 } 
+
+/*
+Returns information about the top commit of a given repository
+*/
+func GetTopCommit(repo *GitRepository) (*GitCommit, error) {
+	head, headErr := repo.Repo.Head()
+	if headErr != nil {
+		return nil, errors.New(fmt.Sprintf("Error accessing repo head: %s", headErr.Error()))
+	}
+
+	commit, commitErr := repo.Repo.CommitObject(head.Hash())
+	if commitErr != nil {
+		return nil, errors.New(fmt.Sprintf("Error accessing repo top commit: %s", commitErr.Error()))
+	}
+
+	return &GitCommit{commit}, nil
+}
+
 
 /*
 Verifies that the top commit of a given git repository was signed by one of the keys that are passed in the argument. 
