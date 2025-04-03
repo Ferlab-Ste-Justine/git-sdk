@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 
@@ -291,5 +292,91 @@ func TestVerifyTopCommit(t *testing.T) {
 }
 
 func TestPushChanges(t *testing.T) {
+	teardown, giteaInfo, reposDir, setupErr := testutils.SetupDefaultTestEnvironment()
+	if setupErr != nil {
+		t.Errorf("Error setting default test environment: %s", setupErr.Error())
+		return
+	}
+	defer teardown()
+
+	sshCreds, sshCredsErr := GetSshCredentials(path.Join("test", "keys", "ssh", "id_rsa"), giteaInfo.KnownHostsFile, giteaInfo.User)
+	if sshCredsErr != nil {
+		t.Errorf("Error retrieving ssh credentials: %s", sshCredsErr.Error())
+		return
+	}
+
+	oneMinute, _ := time.ParseDuration("1m")
+
+	pushErr := PushChanges(func() (*GitRepository, error) {
+		repo, _, syncErr := SyncGitRepo(path.Join(reposDir, "test"), giteaInfo.RepoUrls[0], "main", sshCreds)
+		if syncErr != nil {
+			return nil, syncErr
+		}
+
+		anotherErr := os.WriteFile(path.Join(reposDir, "test", "Another.txt"), []byte("Just some text"), 0770)
+		if anotherErr != nil {
+			return repo, anotherErr
+		}
+
+		_, commitErr := CommitFiles(repo, []string{"Another.txt"}, "Some changes", CommitOptions{
+			Name: giteaInfo.User,
+			Email: "test@test.test",
+		})
+		if commitErr != nil {
+			return repo, commitErr
+		}
+
+		yetAnotherErr := os.WriteFile(path.Join(reposDir, "test", "YetAnother.txt"), []byte("Yet more text"), 0770)
+		if yetAnotherErr != nil {
+			return repo, yetAnotherErr
+		}
+
+		_, commitErr = CommitFiles(repo, []string{"YetAnother.txt"}, "Yet more changes", CommitOptions{
+			Name: giteaInfo.User,
+			Email: "test@test.test",
+		})
+		if commitErr != nil {
+			return repo, commitErr
+		}
+
+		return repo, nil
+	}, "main", sshCreds, 3, oneMinute)
 	
+	if pushErr != nil {
+		t.Errorf("Error pushing changes to gitea server: %s", pushErr.Error())
+		return
+	}
+
+	repo, _, syncErr := SyncGitRepo(path.Join(reposDir, "test2"), giteaInfo.RepoUrls[0], "main", sshCreds)
+	if syncErr != nil {
+		t.Errorf("Error cloning repo test: %s", syncErr.Error())
+		return
+	}
+
+	topCommit, topCommitErr := GetTopCommit(repo)
+	if topCommitErr != nil {
+		t.Errorf("Error fetching top commit: %s", topCommitErr.Error())
+		return
+	}
+
+	if topCommit.Commit.Message != "Yet more changes" {
+		t.Errorf("Expected top commit message to be 'Yet more changes', but it was '%s'", topCommit.Commit.Message)
+		return
+	}
+
+	dirContent, dirContentErr := testutils.GetDirectoryContent(path.Join(reposDir, "test2"), ".git")
+	if dirContentErr != nil {
+		t.Errorf("Error getting directory content of test2: %s", dirContentErr.Error())
+		return
+	}
+
+	expectedDirContent := map[string]string{
+		"README.md": "# test\n\ntest",
+		"Another.txt": "Just some text",
+		"YetAnother.txt": "Yet more text",
+	}
+	if !dirContent.Equals(testutils.DirectoryContent(expectedDirContent)) {
+		t.Errorf("Cloned directory content did not match expectations")
+		return
+	}
 }
