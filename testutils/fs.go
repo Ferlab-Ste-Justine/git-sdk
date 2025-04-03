@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+/*
+This is a test dependency that will most likely be migrated elsewhere. Do not depend on this.
+*/
 type DirectoryContent map[string]string
 
 func (cont DirectoryContent) Equals(other DirectoryContent) bool {
@@ -33,6 +36,9 @@ func (cont DirectoryContent) Equals(other DirectoryContent) bool {
 	return true
 }
 
+/*
+This is a test dependency that will most likely be migrated elsewhere. Do not depend on this.
+*/
 func GetDirectoryContent(rootPath string, skipPrefix string) (DirectoryContent, error) {
 	dirCont := make(map[string]string)
 
