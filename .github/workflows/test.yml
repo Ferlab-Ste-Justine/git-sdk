@@ -1,0 +1,28 @@
+name: test
+
+on: [ push ]
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+      - name: Setup gitea
+        run: |
+          wget -O /tmp/gitea https://github.com/go-gitea/gitea/releases/download/v1.23.6/gitea-1.23.6-linux-amd64
+          echo "fcb76127fec7ba9fba10bfe11d81cdc01888aacb588fc4f29b124bf2ffba883e /tmp/gitea" | sha256sum --check
+          chmod +x /tmp/gitea
+          cp /tmp/gitea /usr/local/bin/gitea
+      - name: Setup go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+      - name: Setup Test Credentials
+        working-directory: ./test
+        run: terraform init && terraform apply -auto-approve
+      - name: Run tests
+        run: go test
+      
