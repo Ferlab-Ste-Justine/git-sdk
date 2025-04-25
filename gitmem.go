@@ -100,14 +100,14 @@ func buildKeySpace(fPath string, sourcePath string, store *MemoryStore, keys map
 /*
 Clone the given reference of a given repo in a memory filesystem.
 A reference to the generated filesystem as well as the repository is returned.
+The sshCred argument can be nil for an unauthenticated clone on https
 */
 func MemCloneGitRepo(url string, ref string, depth int, sshCred *SshCredentials) (*GitRepository, *MemoryStore, error) {
 	storer := memory.NewStorage()
 	fs := memfs.New()
 	store := MemoryStore{storer, &fs}
 
-	repo, cloneErr := gogit.Clone(storer, fs, &gogit.CloneOptions{
-		Auth:              sshCred.Keys,
+	opts := gogit.CloneOptions{
 		RemoteName:        "origin",
 		URL:               url,
 		ReferenceName:     plumbing.NewBranchReferenceName(ref),
@@ -117,7 +117,13 @@ func MemCloneGitRepo(url string, ref string, depth int, sshCred *SshCredentials)
 		RecurseSubmodules: gogit.NoRecurseSubmodules,
 		Progress:          nil,
 		Tags:              gogit.NoTags,
-	})
+	}
+
+	if sshCred != nil {
+		opts.Auth = sshCred.Keys
+	}
+
+	repo, cloneErr := gogit.Clone(storer, fs, &opts)
 	if cloneErr != nil {
 		return &GitRepository{repo}, &store, errors.New(fmt.Sprintf("Error cloning repo in memory: %s", cloneErr.Error()))
 	}

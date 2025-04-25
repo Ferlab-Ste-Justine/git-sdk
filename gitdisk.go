@@ -8,12 +8,10 @@ import (
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 )
 
-func cloneRepo(dir string, url string, ref string, pk *ssh.PublicKeys) (*GitRepository, error) {
-	repo, cloneErr := gogit.PlainClone(dir, false, &gogit.CloneOptions{
-		Auth:              pk,
+func cloneRepo(dir string, url string, ref string, sshCred *SshCredentials) (*GitRepository, error) {
+	opts := gogit.CloneOptions{
 		RemoteName:        "origin",
 		URL:               url,
 		ReferenceName:     plumbing.NewBranchReferenceName(ref),
@@ -22,7 +20,13 @@ func cloneRepo(dir string, url string, ref string, pk *ssh.PublicKeys) (*GitRepo
 		RecurseSubmodules: gogit.NoRecurseSubmodules,
 		Progress:          nil,
 		Tags:              gogit.NoTags,
-	})
+	}
+
+	if sshCred != nil {
+		opts.Auth = sshCred.Keys
+	}
+	
+	repo, cloneErr := gogit.PlainClone(dir, false, &opts)
 	if cloneErr != nil {
 		return &GitRepository{repo}, errors.New(fmt.Sprintf("Error cloning in directory \"%s\": %s", dir, cloneErr.Error()))
 	}
@@ -31,7 +35,7 @@ func cloneRepo(dir string, url string, ref string, pk *ssh.PublicKeys) (*GitRepo
 	return &GitRepository{repo}, nil
 }
 
-func pullRepo(dir string, url string, ref string, pk *ssh.PublicKeys) (*GitRepository, bool, error) {
+func pullRepo(dir string, url string, ref string, sshCred *SshCredentials) (*GitRepository, bool, error) {
 	repo, gitErr := gogit.PlainOpen(dir)
 	if gitErr != nil {
 		return &GitRepository{repo}, true, errors.New(fmt.Sprintf("Error accessing repo in directory \"%s\": %s", dir, gitErr.Error()))
@@ -42,15 +46,20 @@ func pullRepo(dir string, url string, ref string, pk *ssh.PublicKeys) (*GitRepos
 		return &GitRepository{repo}, true, errors.New(fmt.Sprintf("Error accessing worktree in directory \"%s\": %s", dir, worktreeErr.Error()))
 	}
 
-	pullErr := worktree.Pull(&gogit.PullOptions{
-		Auth:              pk,
+	opts := gogit.PullOptions{
 		RemoteName:        "origin",
 		ReferenceName:     plumbing.NewBranchReferenceName(ref),
 		SingleBranch:      true,
 		RecurseSubmodules: gogit.NoRecurseSubmodules,
 		Progress:          nil,
 		Force:             true,
-	})
+	}
+
+	if sshCred != nil {
+		opts.Auth = sshCred.Keys
+	}
+
+	pullErr := worktree.Pull(&opts)
 	if pullErr != nil && pullErr.Error() != gogit.NoErrAlreadyUpToDate.Error() {
 		fastForwardProblems := pullErr.Error() == gogit.ErrNonFastForwardUpdate.Error()
 		return &GitRepository{repo}, fastForwardProblems, errors.New(fmt.Sprintf("Error pulling latest changes in directory \"%s\": %s", dir, pullErr.Error()))
@@ -72,6 +81,7 @@ func pullRepo(dir string, url string, ref string, pk *ssh.PublicKeys) (*GitRepos
 /*
 Clone or pull the given reference of a given repo at a given path on the filesystem.
 If the repo was previously cloned at the path, a pull will be done, else a clone.
+The sshCred argument can be nil for an unauthenticated clone on https
 */
 func SyncGitRepo(dir string, url string, ref string, sshCred *SshCredentials) (*GitRepository, bool, error) {
 	_, err := os.Stat(path.Join(dir, ".git"))
@@ -80,9 +90,9 @@ func SyncGitRepo(dir string, url string, ref string, sshCred *SshCredentials) (*
 			return nil, false, errors.New(fmt.Sprintf("Error accessing repo directory's .git sub-directory: %s", err.Error()))
 		}
 
-		repo, cloneErr := cloneRepo(dir, url, ref, sshCred.Keys)
+		repo, cloneErr := cloneRepo(dir, url, ref, sshCred)
 		return repo, false, cloneErr
 	}
 
-	return pullRepo(dir, url, ref, sshCred.Keys)
+	return pullRepo(dir, url, ref, sshCred)
 }
