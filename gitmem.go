@@ -32,7 +32,7 @@ func (mem *MemoryStore) Clear() {
 }
 
 /*
-Returns all the files in the memory filesystem thet fall under a given source path as a map where the keys are the relative path of each file
+Returns all the files in the memory filesystem that fall under a given source path as a map where the keys are the relative path of each file
 (relative to the specified source path) and the value is their content. 
 You can pass the empty string as a source path if you wish to return the entire content of the memory filesystem.
 */
@@ -40,6 +40,71 @@ func (mem *MemoryStore) GetKeyVals(sourcePath string) (map[string]string, error)
 	keys := make(map[string]string)
 	err := buildKeySpace(sourcePath, sourcePath, mem, keys)
 	return keys, err
+}
+
+/*
+Returns whether the given file exists in the memory filesystem
+*/
+func (mem *MemoryStore) FileExists(filePath string) (bool, error) {
+	targetDir := path.Dir(filePath)
+	fileName := path.Base(filePath)
+
+	dirContent, readDirErr := (*mem.Fs).ReadDir(targetDir)
+	if readDirErr != nil {
+		return false, readDirErr
+	}
+
+	for _, file := range dirContent {
+		if file.IsDir() {
+			continue
+		}
+
+		if file.Name() == fileName {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+/*
+Returns the content of the file in the memory filesystem that falls under the given path.
+*/
+func (mem *MemoryStore) GetFileContent(filePath string) (string, error) {
+	fReader, openErr := (*mem.Fs).Open(filePath)
+	if openErr != nil {
+		return "", openErr
+	}
+
+	fContent, fReaderErr := ioutil.ReadAll(fReader)
+	if fReaderErr != nil {
+		return "", fReaderErr
+	}
+
+	return string(fContent), fReaderErr
+}
+
+/*
+Set the content of the file at the given path in the memory filesystem
+*/
+func (mem *MemoryStore) SetFileContent(filePath string, content string) error {
+	targetDir := path.Dir(filePath)
+	mkdirErr := (*mem.Fs).MkdirAll(targetDir, 0770)
+	if mkdirErr != nil {
+		return mkdirErr
+	}
+
+	fWriter, createErr := (*mem.Fs).Create(filePath)
+	if createErr != nil {
+		return createErr
+	}
+
+	_, writeErr := fWriter.Write([]byte(content))
+	if writeErr != nil {
+		return writeErr
+	}
+
+	return nil
 }
 
 func stripsourcePath(fPath string, sourcePath string) string {
