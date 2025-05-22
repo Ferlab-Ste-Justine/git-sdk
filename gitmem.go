@@ -42,12 +42,51 @@ func (mem *MemoryStore) GetKeyVals(sourcePath string) (map[string]string, error)
 	return keys, err
 }
 
+func (mem *MemoryStore) recurPathExists(accPath string, remnants []string) (bool, error) {
+	var next string
+	next, remnants = remnants[0], remnants[1:]
+
+	dirContent, readDirErr := (*mem.Fs).ReadDir(accPath)
+	if readDirErr != nil {
+		return false, readDirErr
+	}
+
+	for _, elem := range dirContent {
+		if elem.Name() == next {
+			if len(remnants) == 0 {
+				return true, nil
+			}
+
+			if !elem.IsDir() {
+				return false, nil
+			}
+
+			return mem.recurPathExists(path.Join(accPath, next), remnants)
+		}
+	}
+
+	return false, nil
+}
+
 /*
 Returns whether the given file exists in the memory filesystem
 */
 func (mem *MemoryStore) FileExists(filePath string) (bool, error) {
-	targetDir := path.Dir(filePath)
-	fileName := path.Base(filePath)
+	targetDir, fileName := path.Split(filePath)
+
+	if targetDir != "" {
+		dirElems := strings.Split(targetDir, "/")
+		if dirElems[0] == "" {
+			dirElems = dirElems[1:]
+		}
+		if dirElems[len(dirElems)-1] == "" {
+			dirElems = dirElems[:len(dirElems)-1]
+		}
+		dirExists, dirExistsErr := mem.recurPathExists("", dirElems)
+		if dirExistsErr != nil || !dirExists {
+			return dirExists, dirExistsErr
+		}
+	}
 
 	dirContent, readDirErr := (*mem.Fs).ReadDir(targetDir)
 	if readDirErr != nil {
