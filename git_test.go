@@ -1,9 +1,7 @@
 package git
 
 import (
-	"fmt"
 	"os"
-	//"os/user"
 	"path"
 	"testing"
 	"time"
@@ -16,13 +14,13 @@ import (
 func TestGetSignatureKey(t *testing.T) {
 	sign1, err1 := GetSignatureKey(path.Join("test", "keys", "gpg_key_1"), "")
 	if err1 != nil {
-		t.Errorf(err1.Error())
+		t.Errorf("%s", err1.Error())
 		return
 	}
 
 	if user, ok := sign1.Entity.Identities["user1 <user1@email.com>"]; ok {
 		if user.Name != "user1 <user1@email.com>" {
-			t.Errorf(fmt.Sprintf("'%s' was not expected 'user1 <user1@email.com>' value for identity name", user.Name))
+			t.Errorf("'%s' was not expected 'user1 <user1@email.com>' value for identity name", user.Name)
 			return
 		}
 	} else {
