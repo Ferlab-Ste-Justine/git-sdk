@@ -10,7 +10,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
-func cloneRepo(dir string, url string, ref string, sshCred *SshCredentials) (*GitRepository, error) {
+func cloneRepo(dir string, url string, ref string, gitCred *GitCredentials) (*GitRepository, error) {
 	opts := gogit.CloneOptions{
 		RemoteName:        "origin",
 		URL:               url,
@@ -22,8 +22,14 @@ func cloneRepo(dir string, url string, ref string, sshCred *SshCredentials) (*Gi
 		Tags:              gogit.NoTags,
 	}
 
-	if sshCred != nil {
-		opts.Auth = sshCred.Keys
+
+	if gitCred != nil && gitCred.HasAuthMethod() {
+		authMethod, authMethodErr := gitCred.GetAuthMethod(url)
+		if authMethodErr != nil {
+			return nil, authMethodErr
+		}
+
+		opts.Auth = authMethod
 	}
 	
 	repo, cloneErr := gogit.PlainClone(dir, false, &opts)
@@ -35,7 +41,7 @@ func cloneRepo(dir string, url string, ref string, sshCred *SshCredentials) (*Gi
 	return &GitRepository{repo}, nil
 }
 
-func pullRepo(dir string, url string, ref string, sshCred *SshCredentials) (*GitRepository, bool, error) {
+func pullRepo(dir string, url string, ref string, gitCred *GitCredentials) (*GitRepository, bool, error) {
 	repo, gitErr := gogit.PlainOpen(dir)
 	if gitErr != nil {
 		return &GitRepository{repo}, true, errors.New(fmt.Sprintf("Error accessing repo in directory \"%s\": %s", dir, gitErr.Error()))
@@ -55,8 +61,13 @@ func pullRepo(dir string, url string, ref string, sshCred *SshCredentials) (*Git
 		Force:             true,
 	}
 
-	if sshCred != nil {
-		opts.Auth = sshCred.Keys
+	if gitCred != nil && gitCred.HasAuthMethod() {
+		authMethod, authMethodErr := gitCred.GetAuthMethod(url)
+		if authMethodErr != nil {
+			return &GitRepository{repo}, true, authMethodErr
+		}
+
+		opts.Auth = authMethod
 	}
 
 	pullErr := worktree.Pull(&opts)
@@ -83,16 +94,28 @@ Clone or pull the given reference of a given repo at a given path on the filesys
 If the repo was previously cloned at the path, a pull will be done, else a clone.
 The sshCred argument can be nil for an unauthenticated clone on https
 */
-func SyncGitRepo(dir string, url string, ref string, sshCred *SshCredentials) (*GitRepository, bool, error) {
+func SyncGitRepo(dir string, url string, ref string, gitCred *GitCredentials) (*GitRepository, bool, error) {
 	_, err := os.Stat(path.Join(dir, ".git"))
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, false, errors.New(fmt.Sprintf("Error accessing repo directory's .git sub-directory: %s", err.Error()))
 		}
 
-		repo, cloneErr := cloneRepo(dir, url, ref, sshCred)
+		repo, cloneErr := cloneRepo(dir, url, ref, gitCred)
 		return repo, false, cloneErr
 	}
 
-	return pullRepo(dir, url, ref, sshCred)
+	return pullRepo(dir, url, ref, gitCred)
+}
+
+/*
+Get a *GitRepository resource from a repository that has already been cloned on the filesystem
+*/
+func GetGitRepo(dir string) (*GitRepository, error) {
+	repo, err := gogit.PlainOpen(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GitRepository{repo}, nil
 }

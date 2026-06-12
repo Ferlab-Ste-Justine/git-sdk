@@ -10,18 +10,10 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	gogitconf "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
-
-/*
-Structure abstracting away ssh.PublicKeys structure needed by go-git to authenticate with git server
-*/
-type SshCredentials struct {
-	Keys *ssh.PublicKeys
-}
 
 /*
 Structure abstracting away openpgp.Entity structure needed by go-git to sign keys
@@ -48,39 +40,6 @@ func (commit *GitCommit) IsSame(other *GitCommit) bool {
 	return commit.Commit.Hash.String() == other.Commit.Hash.String()
 }
 
-/*
-Produces ssh credentials needed by go-git to clone/pull a remote repository and push to it.
-Arguments are file paths to the private ssh key of the user, ssh host key fingerprint of the git server and user to authentify as (will be 'git' if empty string is passed)
-*/
-func GetSshCredentials(sshKeyPath string, knownHostsPath string, user string) (*SshCredentials, error) {
-	_, statErr := os.Stat(sshKeyPath)
-	if statErr != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to access ssh key file %s: %s", sshKeyPath, statErr.Error()))
-	}
-
-	if user == "" {
-		user = "git"
-	}
-
-	publicKeys, pkGenErr := ssh.NewPublicKeysFromFile(user, sshKeyPath, "")
-	if pkGenErr != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to generate public key: %s", pkGenErr.Error()))
-	}
-
-	_, statErr = os.Stat(knownHostsPath)
-	if statErr != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to access known hosts file %s: %s", knownHostsPath, statErr.Error()))
-	}
-	
-	callback, knowHostsErr := ssh.NewKnownHostsCallback(knownHostsPath)
-	if knowHostsErr != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to parse known hosts file %s: %s", knownHostsPath, knowHostsErr.Error()))
-	}
-
-	(*publicKeys).HostKeyCallbackHelper.HostKeyCallback = callback
-
-	return &SshCredentials{publicKeys}, nil
-}
 
 /*
 Produces a commit signature needed to sign a commit.
@@ -246,7 +205,7 @@ Takes a function argument that should return a git repository with changes to pu
 From there, it will try to push the new commits in the repository to the given reference on origin.
 If there are conflicts during the push, it will keep retrying by re-invoking its function argument and push on the returned repository.
 */
-func PushChanges(hook PushPreHook, ref string, sshCred *SshCredentials, retries int64, retryInterval time.Duration) error {
+func PushChanges(hook PushPreHook, ref string, gitCred *GitCredentials, retries int64, retryInterval time.Duration) error {
 	repo, hookErr := hook()
 	if hookErr != nil {
 		return hookErr
@@ -257,9 +216,14 @@ func PushChanges(hook PushPreHook, ref string, sshCred *SshCredentials, retries 
 		return nil
 	}
 
+	authMethod, authMethodErr := gitCred.GetAuthMethod("")
+	if authMethodErr != nil {
+		return authMethodErr
+	}
+
 	refMap := gogitconf.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", ref, ref))
 	pushErr := repo.Repo.Push(&gogit.PushOptions{
-		Auth: sshCred.Keys,
+		Auth: authMethod,
 		Force: false,
 		Prune: false,
 		RemoteName: "origin",
@@ -280,7 +244,7 @@ func PushChanges(hook PushPreHook, ref string, sshCred *SshCredentials, retries 
 			fmt.Println("Push operation failed as remote was updated with non-local commits. Will retry.")
 			time.Sleep(retryInterval)
 
-			return PushChanges(hook, ref, sshCred, retries - 1, retryInterval)
+			return PushChanges(hook, ref, gitCred, retries - 1, retryInterval)
 		}
 
 		return errors.New(fmt.Sprintf("Error pushing file changes: %s", pushErr.Error()))

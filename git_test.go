@@ -3,6 +3,7 @@ package git
 import (
 	"fmt"
 	"os"
+	//"os/user"
 	"path"
 	"testing"
 	"time"
@@ -11,26 +12,6 @@ import (
 
 	"github.com/Ferlab-Ste-Justine/git-sdk/testutils"
 )
-
-func TestGetSshCredentials(t *testing.T) {
-	teardown, giteaInfo, _, setupErr := testutils.SetupDefaultTestEnvironment()
-	if setupErr != nil {
-		t.Errorf("Error setting default test environment: %s", setupErr.Error())
-		return
-	}
-	defer teardown()
-
-	sshCreds, sshCredsErr := GetSshCredentials(path.Join("test", "keys", "ssh", "id_rsa"), giteaInfo.KnownHostsFile, "someUser")
-	if sshCredsErr != nil {
-		t.Errorf("Error retrieving ssh credentials: %s", sshCredsErr.Error())
-		return
-	}
-
-	if sshCreds.Keys.User != "someUser" {
-		t.Errorf("Expected ssh credentials to have user 'someUser' and it had user '%s' instead", sshCreds.Keys.User)
-		return
-	}
-}
 
 func TestGetSignatureKey(t *testing.T) {
 	sign1, err1 := GetSignatureKey(path.Join("test", "keys", "gpg_key_1"), "")
@@ -55,21 +36,8 @@ func TestGetSignatureKey(t *testing.T) {
 	}
 }
 
-func TestCommitFiles(t *testing.T) {
-	teardown, giteaInfo, reposDir, setupErr := testutils.SetupDefaultTestEnvironment()
-	if setupErr != nil {
-		t.Errorf("Error setting default test environment: %s", setupErr.Error())
-		return
-	}
-	defer teardown()
-
-	sshCreds, sshCredsErr := GetSshCredentials(path.Join("test", "keys", "ssh", "id_rsa"), giteaInfo.KnownHostsFile, giteaInfo.User)
-	if sshCredsErr != nil {
-		t.Errorf("Error retrieving ssh credentials: %s", sshCredsErr.Error())
-		return
-	}
-
-	repo, _, syncErr := SyncGitRepo(path.Join(reposDir, "test"), giteaInfo.RepoUrls[0], "main", sshCreds)
+func testCommitFiles(giteaInfo testutils.TestGiteaInfo, reposDir string, gitCreds *GitCredentials, repoUrl string, t *testing.T) {
+	repo, _, syncErr := SyncGitRepo(path.Join(reposDir, "test"), repoUrl, "main", gitCreds)
 	if syncErr != nil {
 		t.Errorf("Error cloning repo test: %s", syncErr.Error())
 		return
@@ -192,9 +160,39 @@ func TestCommitFiles(t *testing.T) {
 	}
 
 	if topCommit.Commit.PGPSignature == "" {
-		t.Errorf("Expected a signature on the top commit, but there was nont")
+		t.Errorf("Expected a signature on the top commit, but there was none")
 		return
 	}
+}
+
+func TestCommitFilesInSsh(t *testing.T) {
+	teardown, giteaInfo, reposDir, setupErr := testutils.SetupDefaultTestEnvironment()
+	if setupErr != nil {
+		t.Errorf("Error setting default test environment: %s", setupErr.Error())
+		return
+	}
+	defer teardown()
+
+	sshCreds, sshCredsErr := GetSshCredentials(path.Join("test", "keys", "ssh", "id_rsa"), giteaInfo.KnownHostsFile, giteaInfo.User)
+	if sshCredsErr != nil {
+		t.Errorf("Error retrieving ssh credentials: %s", sshCredsErr.Error())
+		return
+	}
+
+	testCommitFiles(giteaInfo, reposDir, sshCreds, giteaInfo.RepoUrls[0], t)
+}
+
+func TestCommitFilesInHttp(t *testing.T) {
+	teardown, giteaInfo, reposDir, setupErr := testutils.SetupDefaultTestEnvironment()
+	if setupErr != nil {
+		t.Errorf("Error setting default test environment: %s", setupErr.Error())
+		return
+	}
+	defer teardown()
+
+	httpsCreds := GetHttpsCredentials(giteaInfo.User, "test")
+
+	testCommitFiles(giteaInfo, reposDir, httpsCreds, giteaInfo.RepoHttpUrls[0], t)
 }
 
 func TestVerifyTopCommit(t *testing.T) {
@@ -291,24 +289,11 @@ func TestVerifyTopCommit(t *testing.T) {
 	}
 }
 
-func TestPushChanges(t *testing.T) {
-	teardown, giteaInfo, reposDir, setupErr := testutils.SetupDefaultTestEnvironment()
-	if setupErr != nil {
-		t.Errorf("Error setting default test environment: %s", setupErr.Error())
-		return
-	}
-	defer teardown()
-
-	sshCreds, sshCredsErr := GetSshCredentials(path.Join("test", "keys", "ssh", "id_rsa"), giteaInfo.KnownHostsFile, giteaInfo.User)
-	if sshCredsErr != nil {
-		t.Errorf("Error retrieving ssh credentials: %s", sshCredsErr.Error())
-		return
-	}
-
+func testPushChanges(giteaInfo testutils.TestGiteaInfo, reposDir string, gitCreds *GitCredentials, repoUrl string, t *testing.T) {
 	oneMinute, _ := time.ParseDuration("1m")
 
 	pushErr := PushChanges(func() (*GitRepository, error) {
-		repo, _, syncErr := SyncGitRepo(path.Join(reposDir, "test"), giteaInfo.RepoUrls[0], "main", sshCreds)
+		repo, _, syncErr := SyncGitRepo(path.Join(reposDir, "test"), repoUrl, "main", gitCreds)
 		if syncErr != nil {
 			return nil, syncErr
 		}
@@ -340,14 +325,14 @@ func TestPushChanges(t *testing.T) {
 		}
 
 		return repo, nil
-	}, "main", sshCreds, 3, oneMinute)
+	}, "main", gitCreds, 3, oneMinute)
 	
 	if pushErr != nil {
 		t.Errorf("Error pushing changes to gitea server: %s", pushErr.Error())
 		return
 	}
 
-	repo, _, syncErr := SyncGitRepo(path.Join(reposDir, "test2"), giteaInfo.RepoUrls[0], "main", sshCreds)
+	repo, _, syncErr := SyncGitRepo(path.Join(reposDir, "test2"), repoUrl, "main", gitCreds)
 	if syncErr != nil {
 		t.Errorf("Error cloning repo test: %s", syncErr.Error())
 		return
@@ -379,4 +364,34 @@ func TestPushChanges(t *testing.T) {
 		t.Errorf("Cloned directory content did not match expectations")
 		return
 	}
+}
+
+func TestPushChangesSsh(t *testing.T) {
+	teardown, giteaInfo, reposDir, setupErr := testutils.SetupDefaultTestEnvironment()
+	if setupErr != nil {
+		t.Errorf("Error setting default test environment: %s", setupErr.Error())
+		return
+	}
+	defer teardown()
+
+	sshCreds, sshCredsErr := GetSshCredentials(path.Join("test", "keys", "ssh", "id_rsa"), giteaInfo.KnownHostsFile, giteaInfo.User)
+	if sshCredsErr != nil {
+		t.Errorf("Error retrieving ssh credentials: %s", sshCredsErr.Error())
+		return
+	}
+
+	testPushChanges(giteaInfo, reposDir, sshCreds, giteaInfo.RepoUrls[0], t)
+}
+
+func TestPushChangesHttp(t *testing.T) {
+	teardown, giteaInfo, reposDir, setupErr := testutils.SetupDefaultTestEnvironment()
+	if setupErr != nil {
+		t.Errorf("Error setting default test environment: %s", setupErr.Error())
+		return
+	}
+	defer teardown()
+
+	httpsCreds := GetHttpsCredentials(giteaInfo.User, "test")
+
+	testPushChanges(giteaInfo, reposDir, httpsCreds, giteaInfo.RepoHttpUrls[0], t)
 }

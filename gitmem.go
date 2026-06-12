@@ -206,7 +206,7 @@ Clone the given reference of a given repo in a memory filesystem.
 A reference to the generated filesystem as well as the repository is returned.
 The sshCred argument can be nil for an unauthenticated clone on https
 */
-func MemCloneGitRepo(url string, ref string, depth int, sshCred *SshCredentials) (*GitRepository, *MemoryStore, error) {
+func MemCloneGitRepo(url string, ref string, depth int, gitCred *GitCredentials) (*GitRepository, *MemoryStore, error) {
 	storer := memory.NewStorage()
 	fs := memfs.New()
 	store := MemoryStore{storer, &fs}
@@ -223,8 +223,13 @@ func MemCloneGitRepo(url string, ref string, depth int, sshCred *SshCredentials)
 		Tags:              gogit.NoTags,
 	}
 
-	if sshCred != nil {
-		opts.Auth = sshCred.Keys
+	if gitCred != nil && gitCred.HasAuthMethod() {
+		authMethod, authMethodErr := gitCred.GetAuthMethod(url)
+		if authMethodErr != nil {
+			return nil, &store, authMethodErr
+		}
+
+		opts.Auth = authMethod
 	}
 
 	repo, cloneErr := gogit.Clone(storer, fs, &opts)

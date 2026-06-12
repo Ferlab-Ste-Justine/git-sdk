@@ -77,6 +77,7 @@ func WaitOnServer(url string) error {
 type TestGiteaInfo struct {
 	User string
 	RepoUrls []string
+	RepoHttpUrls []string
 	KnownHostsFile string
 }
 
@@ -200,6 +201,7 @@ func LaunchTestGitea(opts GiteaOpts) (TeardownTestGitea, TestGiteaInfo, error) {
 	}
 
 	sshUrls := []string{}
+	httpUrls := []string{}
 	for _, repo := range opts.Repos {
 		repo, _, repoErr := cli.CreateRepo(gitea.CreateRepoOption{
 			Name: repo,
@@ -214,6 +216,7 @@ func LaunchTestGitea(opts GiteaOpts) (TeardownTestGitea, TestGiteaInfo, error) {
 		}
 
 		sshUrls = append(sshUrls, repo.SSHURL)
+		httpUrls = append(httpUrls, repo.CloneURL)
 	}
 
 	sshKeyPub, sshKeyPubErr := os.ReadFile(path.Join(opts.Workdir, "data", "ssh", "gitea.rsa.pub"))
@@ -237,7 +240,8 @@ func LaunchTestGitea(opts GiteaOpts) (TeardownTestGitea, TestGiteaInfo, error) {
 
 	return teardown, TestGiteaInfo{
 		User: currUser.Username, 
-		RepoUrls: sshUrls, 
+		RepoUrls: sshUrls,
+		RepoHttpUrls: httpUrls,
 		KnownHostsFile: knownHostsPath,
 	}, nil
 }
