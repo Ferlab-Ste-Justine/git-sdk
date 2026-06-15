@@ -50,7 +50,7 @@ func pullRepoExec(dir string, rawURL string, ref string, creds *HttpsCredentials
 
 	fetchOut, fetchErr := exec.Command(
 		"git", "-C", dir, "fetch", authURL,
-		fmt.Sprintf("+refs/heads/%s:refs/heads/%s", ref, ref),
+		fmt.Sprintf("refs/heads/%s", ref),
 	).CombinedOutput()
 	if fetchErr != nil {
 		return nil, false, errors.New(fmt.Sprintf(
@@ -59,7 +59,7 @@ func pullRepoExec(dir string, rawURL string, ref string, creds *HttpsCredentials
 		))
 	}
 
-	resetOut, resetErr := exec.Command("git", "-C", dir, "reset", "--hard", ref).CombinedOutput()
+	resetOut, resetErr := exec.Command("git", "-C", dir, "reset", "--hard", "FETCH_HEAD").CombinedOutput()
 	if resetErr != nil {
 		return nil, true, errors.New(fmt.Sprintf(
 			"Error resetting in directory \"%s\": %s", dir, string(resetOut),
