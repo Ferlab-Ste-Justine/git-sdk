@@ -3,87 +3,14 @@ package git
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
-	"os/exec"
 	"path"
-	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
-func injectHttpsCreds(rawURL string, creds *HttpsCredentials) (string, error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid repo URL %q: %w", rawURL, err)
-	}
-	u.User = url.UserPassword(creds.Auth.Username, creds.Auth.Password)
-	return u.String(), nil
-}
-
-func sanitizeCredURL(output string, password string) string {
-	if password == "" {
-		return output
-	}
-	return strings.ReplaceAll(output, password, "***")
-}
-
-func cloneRepoExec(dir string, rawURL string, ref string, creds *HttpsCredentials) (*GitRepository, error) {
-	authURL, err := injectHttpsCreds(rawURL, creds)
-	if err != nil {
-		return nil, err
-	}
-	out, execErr := exec.Command("git", "clone", "--single-branch", "--branch", ref, authURL, dir).CombinedOutput()
-	if execErr != nil {
-		return nil, errors.New(fmt.Sprintf("Error cloning in directory \"%s\": %s", dir, sanitizeCredURL(string(out), creds.Auth.Password)))
-	}
-	fmt.Println(fmt.Sprintf("Cloned branch \"%s\" of repo \"%s\"", ref, rawURL))
-	return GetGitRepo(dir)
-}
-
-func pullRepoExec(dir string, rawURL string, ref string, creds *HttpsCredentials) (*GitRepository, bool, error) {
-	authURL, err := injectHttpsCreds(rawURL, creds)
-	if err != nil {
-		return nil, false, err
-	}
-
-	fetchOut, fetchErr := exec.Command(
-		"git", "-C", dir, "fetch", authURL,
-		fmt.Sprintf("refs/heads/%s", ref),
-	).CombinedOutput()
-	if fetchErr != nil {
-		return nil, false, errors.New(fmt.Sprintf(
-			"Error pulling latest changes in directory \"%s\": %s",
-			dir, sanitizeCredURL(string(fetchOut), creds.Auth.Password),
-		))
-	}
-
-	resetOut, resetErr := exec.Command("git", "-C", dir, "reset", "--hard", "FETCH_HEAD").CombinedOutput()
-	if resetErr != nil {
-		return nil, true, errors.New(fmt.Sprintf(
-			"Error resetting in directory \"%s\": %s", dir, string(resetOut),
-		))
-	}
-
-	repo, getErr := GetGitRepo(dir)
-	if getErr != nil {
-		return nil, true, getErr
-	}
-
-	head, headErr := repo.Repo.Head()
-	if headErr != nil {
-		return repo, true, errors.New(fmt.Sprintf("Error accessing top commit in directory \"%s\": %s", dir, headErr.Error()))
-	}
-	fmt.Println(fmt.Sprintf("Branch \"%s\" of repo \"%s\" is at commit %s", ref, rawURL, head.Hash()))
-	return repo, false, nil
-}
-
 func cloneRepo(dir string, url string, ref string, gitCred *GitCredentials) (*GitRepository, error) {
-	if gitCred != nil && gitCred.Https != nil {
-		return cloneRepoExec(dir, url, ref, gitCred.Https)
-	}
-
 	opts := gogit.CloneOptions{
 		RemoteName:        "origin",
 		URL:               url,
@@ -114,10 +41,6 @@ func cloneRepo(dir string, url string, ref string, gitCred *GitCredentials) (*Gi
 }
 
 func pullRepo(dir string, url string, ref string, gitCred *GitCredentials) (*GitRepository, bool, error) {
-	if gitCred != nil && gitCred.Https != nil {
-		return pullRepoExec(dir, url, ref, gitCred.Https)
-	}
-
 	repo, gitErr := gogit.PlainOpen(dir)
 	if gitErr != nil {
 		return &GitRepository{repo}, true, errors.New(fmt.Sprintf("Error accessing repo in directory \"%s\": %s", dir, gitErr.Error()))

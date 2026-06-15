@@ -41,6 +41,9 @@ func TestSyncGitRepoSsh(t *testing.T) {
 	}
 
 	testSyncGitRepo(giteaInfo, reposDir, sshCreds, giteaInfo.RepoUrls[0], t)
+
+	//Validate with already cloned repo
+	testSyncGitRepo(giteaInfo, reposDir, sshCreds, giteaInfo.RepoUrls[0], t)
 }
 
 func TestSyncGitRepoHttp(t *testing.T) {
@@ -55,7 +58,7 @@ func TestSyncGitRepoHttp(t *testing.T) {
 
 	testSyncGitRepo(giteaInfo, reposDir, httpsCreds, giteaInfo.RepoHttpUrls[0], t)
 
-	// Second call exercises the pull path (exec-based fetch+reset for HTTPS)
+	//Validate with already cloned repo
 	testSyncGitRepo(giteaInfo, reposDir, httpsCreds, giteaInfo.RepoHttpUrls[0], t)
 }
 
