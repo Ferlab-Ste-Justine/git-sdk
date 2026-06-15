@@ -22,7 +22,6 @@ func cloneRepo(dir string, url string, ref string, gitCred *GitCredentials) (*Gi
 		Tags:              gogit.NoTags,
 	}
 
-
 	if gitCred != nil && gitCred.HasAuthMethod() {
 		authMethod, authMethodErr := gitCred.GetAuthMethod(url)
 		if authMethodErr != nil {
@@ -31,7 +30,7 @@ func cloneRepo(dir string, url string, ref string, gitCred *GitCredentials) (*Gi
 
 		opts.Auth = authMethod
 	}
-	
+
 	repo, cloneErr := gogit.PlainClone(dir, false, &opts)
 	if cloneErr != nil {
 		return &GitRepository{repo}, errors.New(fmt.Sprintf("Error cloning in directory \"%s\": %s", dir, cloneErr.Error()))
@@ -75,7 +74,7 @@ func pullRepo(dir string, url string, ref string, gitCred *GitCredentials) (*Git
 		fastForwardProblems := pullErr.Error() == gogit.ErrNonFastForwardUpdate.Error()
 		return &GitRepository{repo}, fastForwardProblems, errors.New(fmt.Sprintf("Error pulling latest changes in directory \"%s\": %s", dir, pullErr.Error()))
 	}
-	
+
 	if pullErr != nil && pullErr.Error() == gogit.NoErrAlreadyUpToDate.Error() {
 		fmt.Println(fmt.Sprintf("Branch \"%s\" of repo \"%s\" is up-to-date", ref, url))
 	} else {
