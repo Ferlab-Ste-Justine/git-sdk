@@ -54,6 +54,9 @@ func TestSyncGitRepoHttp(t *testing.T) {
 	httpsCreds := GetHttpsCredentials(giteaInfo.User, "test")
 
 	testSyncGitRepo(giteaInfo, reposDir, httpsCreds, giteaInfo.RepoHttpUrls[0], t)
+
+	// Second call exercises the pull path (exec-based fetch+reset for HTTPS)
+	testSyncGitRepo(giteaInfo, reposDir, httpsCreds, giteaInfo.RepoHttpUrls[0], t)
 }
 
 func TestGetGitRepo(t *testing.T) {
